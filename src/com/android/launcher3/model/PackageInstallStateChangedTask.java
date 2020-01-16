@@ -18,7 +18,6 @@ package com.android.launcher3.model;
 import android.content.ComponentName;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.os.Process;
 
 import com.android.launcher3.AllAppsList;
 import com.android.launcher3.AppInfo;
@@ -28,7 +27,7 @@ import com.android.launcher3.LauncherAppWidgetInfo;
 import com.android.launcher3.LauncherModel.CallbackTask;
 import com.android.launcher3.LauncherModel.Callbacks;
 import com.android.launcher3.PromiseAppInfo;
-import com.android.launcher3.ShortcutInfo;
+import com.android.launcher3.WorkspaceItemInfo;
 import com.android.launcher3.compat.PackageInstallerCompat;
 import com.android.launcher3.compat.PackageInstallerCompat.PackageInstallInfo;
 import com.android.launcher3.util.InstantAppResolver;
@@ -56,7 +55,7 @@ public class PackageInstallStateChangedTask extends BaseModelUpdateTask {
                 ApplicationInfo ai = app.getContext()
                         .getPackageManager().getApplicationInfo(mInstallInfo.packageName, 0);
                 if (InstantAppResolver.newInstance(app.getContext()).isInstantApp(ai)) {
-                    app.getModel().onPackageAdded(ai.packageName, Process.myUserHandle());
+                    app.getModel().onPackageAdded(ai.packageName, mInstallInfo.user);
                 }
             } catch (PackageManager.NameNotFoundException e) {
                 // Ignore
@@ -106,15 +105,15 @@ public class PackageInstallStateChangedTask extends BaseModelUpdateTask {
         synchronized (dataModel) {
             final HashSet<ItemInfo> updates = new HashSet<>();
             for (ItemInfo info : dataModel.itemsIdMap) {
-                if (info instanceof ShortcutInfo) {
-                    ShortcutInfo si = (ShortcutInfo) info;
+                if (info instanceof WorkspaceItemInfo) {
+                    WorkspaceItemInfo si = (WorkspaceItemInfo) info;
                     ComponentName cn = si.getTargetComponent();
                     if (si.hasPromiseIconUi() && (cn != null)
                             && mInstallInfo.packageName.equals(cn.getPackageName())) {
                         si.setInstallProgress(mInstallInfo.progress);
                         if (mInstallInfo.state == PackageInstallerCompat.STATUS_FAILED) {
                             // Mark this info as broken.
-                            si.status &= ~ShortcutInfo.FLAG_INSTALL_SESSION_ACTIVE;
+                            si.status &= ~WorkspaceItemInfo.FLAG_INSTALL_SESSION_ACTIVE;
                         }
                         updates.add(si);
                     }

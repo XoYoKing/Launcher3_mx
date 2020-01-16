@@ -29,19 +29,25 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 /**
  * A utility class to maintain the collection of all apps.
  */
 public class AllAppsStore {
 
+    // Defer updates flag used to defer all apps updates to the next draw.
+    public static final int DEFER_UPDATES_NEXT_DRAW = 1 << 0;
+    // Defer updates flag used to defer all apps updates by a test's request.
+    public static final int DEFER_UPDATES_TEST = 1 << 1;
+
     private PackageUserKey mTempKey = new PackageUserKey(null, null);
     private final HashMap<ComponentKey, AppInfo> mComponentToAppMap = new HashMap<>();
     private final List<OnUpdateListener> mUpdateListeners = new ArrayList<>();
     private final ArrayList<ViewGroup> mIconContainers = new ArrayList<>();
 
-    private boolean mDeferUpdates = false;
+    private int mDeferUpdatesFlags = 0;
     private boolean mUpdatePending = false;
 
     public Collection<AppInfo> getApps() {
@@ -60,15 +66,24 @@ public class AllAppsStore {
         return mComponentToAppMap.get(key);
     }
 
-    public void setDeferUpdates(boolean deferUpdates) {
-        if (mDeferUpdates != deferUpdates) {
-            mDeferUpdates = deferUpdates;
+    public void enableDeferUpdates(int flag) {
+        mDeferUpdatesFlags |= flag;
+    }
 
-            if (!mDeferUpdates && mUpdatePending) {
-                notifyUpdate();
-                mUpdatePending = false;
-            }
+    public void disableDeferUpdates(int flag) {
+        mDeferUpdatesFlags &= ~flag;
+        if (mDeferUpdatesFlags == 0 && mUpdatePending) {
+            notifyUpdate();
+            mUpdatePending = false;
         }
+    }
+
+    public void disableDeferUpdatesSilently(int flag) {
+        mDeferUpdatesFlags &= ~flag;
+    }
+
+    public int getDeferUpdatesFlags() {
+        return mDeferUpdatesFlags;
     }
 
     /**
@@ -93,7 +108,7 @@ public class AllAppsStore {
 
 
     private void notifyUpdate() {
-        if (mDeferUpdates) {
+        if (mDeferUpdatesFlags != 0) {
             mUpdatePending = true;
             return;
         }
@@ -121,12 +136,12 @@ public class AllAppsStore {
         mIconContainers.remove(container);
     }
 
-    public void updateIconBadges(Set<PackageUserKey> updatedBadges) {
+    public void updateNotificationDots(Predicate<PackageUserKey> updatedDots) {
         updateAllIcons((child) -> {
             if (child.getTag() instanceof ItemInfo) {
                 ItemInfo info = (ItemInfo) child.getTag();
-                if (mTempKey.updateFromItemInfo(info) && updatedBadges.contains(mTempKey)) {
-                    child.applyBadgeState(info, true /* animate */);
+                if (mTempKey.updateFromItemInfo(info) && updatedDots.test(mTempKey)) {
+                    child.applyDotState(info, true /* animate */);
                 }
             }
         });
@@ -140,7 +155,7 @@ public class AllAppsStore {
         });
     }
 
-    private void updateAllIcons(IconAction action) {
+    private void updateAllIcons(Consumer<BubbleTextView> action) {
         for (int i = mIconContainers.size() - 1; i >= 0; i--) {
             ViewGroup parent = mIconContainers.get(i);
             int childCount = parent.getChildCount();
@@ -148,7 +163,7 @@ public class AllAppsStore {
             for (int j = 0; j < childCount; j++) {
                 View child = parent.getChildAt(j);
                 if (child instanceof BubbleTextView) {
-                    action.apply((BubbleTextView) child);
+                    action.accept((BubbleTextView) child);
                 }
             }
         }
@@ -156,9 +171,5 @@ public class AllAppsStore {
 
     public interface OnUpdateListener {
         void onAppsUpdated();
-    }
-
-    public interface IconAction {
-        void apply(BubbleTextView icon);
     }
 }
